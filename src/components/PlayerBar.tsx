@@ -1,9 +1,10 @@
 import { formatDuration } from "../lib/api";
 import { useCurrentTrack, usePlayer } from "../store/player";
+import { useDownloads } from "../store/downloads";
 import { Cover } from "./Cover";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
-export function PlayerBar() {
+export function PlayerBar({ onToggleQueue }: { onToggleQueue: () => void }) {
   const track = useCurrentTrack();
   const {
     isPlaying,
@@ -23,59 +24,52 @@ export function PlayerBar() {
     cycleRepeat,
     toggleShuffle,
   } = usePlayer();
+  const { jobs, setPanelOpen } = useDownloads();
 
+  const active = jobs.filter((j) => j.stage !== "done" && j.stage !== "failed").length;
   const pct = duration > 0 ? (position / duration) * 100 : 0;
   const volPct = (muted ? 0 : volume) * 100;
 
   return (
-    <footer className="flex h-[76px] shrink-0 items-center gap-4 border-t border-line bg-panel px-4">
-      {/* Now playing */}
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <footer className="flex h-16 shrink-0 items-center gap-4 border-t border-line px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
         {track ? (
           <>
-            <Cover path={track.cover_path} size={48} />
+            <Cover path={track.cover_path} size={38} />
             <div className="min-w-0">
-              <div className="truncate font-medium">{track.title}</div>
-              <div className="truncate text-xs text-ink-dim">{track.artist}</div>
+              <div className="truncate text-[12.5px]">{track.title}</div>
+              <div className="truncate text-[11px] text-dim">{track.artist}</div>
             </div>
           </>
         ) : (
-          <div className="text-sm text-ink-mute">Nothing playing</div>
+          <span className="text-[12px] text-faint">Nothing playing</span>
         )}
       </div>
 
-      {/* Transport */}
-      <div className="flex w-[42%] max-w-2xl flex-col items-center gap-1.5">
-        <div className="flex items-center gap-4">
-          <IconButton
-            label="Shuffle"
-            active={shuffle}
-            onClick={toggleShuffle}
-            icon="shuffle"
-          />
-          <IconButton label="Previous" onClick={previous} icon="prev" size={18} />
-
+      <div className="flex w-[40%] max-w-xl flex-col items-center gap-1">
+        <div className="flex items-center gap-3.5">
+          <Ctrl icon="shuffle" label="Shuffle" active={shuffle} onClick={toggleShuffle} />
+          <Ctrl icon="prev" label="Previous" onClick={previous} size={16} />
           <button
             onClick={toggle}
             disabled={!track}
             aria-label={isPlaying ? "Pause" : "Play"}
-            className="grid h-9 w-9 place-items-center rounded-full bg-ink text-app transition hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+            className="grid h-8 w-8 place-items-center rounded-full bg-text text-bg transition hover:opacity-90 disabled:opacity-25"
           >
-            <Icon name={isPlaying ? "pause" : "play"} size={17} />
+            <Icon name={isPlaying ? "pause" : "play"} size={15} />
           </button>
-
-          <IconButton label="Next" onClick={next} icon="next" size={18} />
-          <IconButton
+          <Ctrl icon="next" label="Next" onClick={next} size={16} />
+          <Ctrl
+            icon="repeat"
             label={`Repeat: ${repeat}`}
             active={repeat !== "off"}
             onClick={cycleRepeat}
-            icon="repeat"
             badge={repeat === "one" ? "1" : undefined}
           />
         </div>
 
         <div className="flex w-full items-center gap-2">
-          <span className="w-10 text-right text-[11px] tabular-nums text-ink-mute">
+          <span className="w-9 text-right text-[10.5px] tabular-nums text-faint">
             {formatDuration(position)}
           </span>
           <input
@@ -89,27 +83,42 @@ export function PlayerBar() {
             aria-label="Seek"
             className="h-1 flex-1"
             style={{
-              ["--track-bg" as string]: `linear-gradient(to right, var(--color-accent) ${pct}%, #33333d ${pct}%)`,
+              ["--track-bg" as string]: `linear-gradient(to right, var(--color-accent) ${pct}%, #2a2a30 ${pct}%)`,
             }}
           />
-          <span className="w-10 text-[11px] tabular-nums text-ink-mute">
+          <span className="w-9 text-[10.5px] tabular-nums text-faint">
             {formatDuration(duration)}
           </span>
         </div>
       </div>
 
-      {/* Volume */}
-      <div className="flex flex-1 items-center justify-end gap-2">
+      <div className="flex flex-1 items-center justify-end gap-2.5">
         {error && (
-          <span className="max-w-[16rem] truncate text-xs text-red-400" title={error}>
+          <span className="max-w-[14rem] truncate text-[11px] text-red-400" title={error}>
             {error}
           </span>
         )}
-        <IconButton
+
+        <button
+          onClick={() => setPanelOpen(true)}
+          aria-label="Downloads"
+          title="Downloads"
+          className="relative text-dim transition hover:text-text"
+        >
+          <Icon name="download" size={15} />
+          {active > 0 && (
+            <span className="absolute -right-1.5 -top-1 rounded-full bg-accent px-1 text-[9px] font-semibold text-bg">
+              {active}
+            </span>
+          )}
+        </button>
+
+        <Ctrl icon="queue" label="Queue" onClick={onToggleQueue} size={15} />
+        <Ctrl
+          icon={muted || volume === 0 ? "mute" : "volume"}
           label={muted ? "Unmute" : "Mute"}
           onClick={toggleMute}
-          icon={muted || volume === 0 ? "mute" : "volume"}
-          size={17}
+          size={15}
         />
         <input
           type="range"
@@ -119,9 +128,9 @@ export function PlayerBar() {
           value={muted ? 0 : volume}
           onChange={(e) => setVolume(Number(e.target.value))}
           aria-label="Volume"
-          className="h-1 w-24"
+          className="h-1 w-20"
           style={{
-            ["--track-bg" as string]: `linear-gradient(to right, var(--color-ink-dim) ${volPct}%, #33333d ${volPct}%)`,
+            ["--track-bg" as string]: `linear-gradient(to right, var(--color-dim) ${volPct}%, #2a2a30 ${volPct}%)`,
           }}
         />
       </div>
@@ -129,16 +138,16 @@ export function PlayerBar() {
   );
 }
 
-function IconButton({
-  label,
+function Ctrl({
   icon,
+  label,
   onClick,
   active = false,
-  size = 16,
+  size = 14,
   badge,
 }: {
+  icon: IconName;
   label: string;
-  icon: Parameters<typeof Icon>[0]["name"];
   onClick: () => void;
   active?: boolean;
   size?: number;
@@ -149,14 +158,10 @@ function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`relative transition ${
-        active ? "text-accent" : "text-ink-dim hover:text-ink"
-      }`}
+      className={`relative transition ${active ? "text-accent" : "text-dim hover:text-text"}`}
     >
       <Icon name={icon} size={size} />
-      {badge && (
-        <span className="absolute -right-1 -top-1 text-[9px] font-bold">{badge}</span>
-      )}
+      {badge && <span className="absolute -right-1 -top-1 text-[8px] font-bold">{badge}</span>}
     </button>
   );
 }

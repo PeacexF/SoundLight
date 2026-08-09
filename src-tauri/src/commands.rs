@@ -305,6 +305,7 @@ pub async fn update_yt_dlp(app: AppHandle) -> CmdResult<String> {
 pub fn download_extract(app: AppHandle, url: Option<String>) -> CmdResult<u64> {
     let target = url
         .filter(|u| !u.trim().is_empty())
+        .or_else(|| browser::last_page(&app))
         .or_else(|| browser::current_url(&app))
         .ok_or_else(|| "nothing to download — open a page first".to_string())?;
 

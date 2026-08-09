@@ -17,7 +17,7 @@ export function Cover({ path, size, className = "" }: Props) {
   if (!path || broken) {
     return (
       <div
-        className={`${base} grid place-items-center text-ink-mute`}
+        className={`${base} grid place-items-center text-faint`}
         style={style}
       >
         <Icon name="note" size={Math.round(size * 0.42)} />

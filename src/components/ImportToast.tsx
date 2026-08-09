@@ -14,14 +14,14 @@ export function ImportToast() {
   ].filter(Boolean);
 
   return (
-    <div className="absolute bottom-4 right-4 z-10 w-80 rounded-lg border border-line bg-raised p-3 shadow-xl">
+    <div className="w-[22rem] rounded-xl border border-line bg-surface p-3 shadow-2xl shadow-black/60">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium">Import finished</div>
-          <div className="mt-0.5 text-xs text-ink-dim">{parts.join(" · ")}</div>
+          <div className="text-[12.5px] font-medium">Import finished</div>
+          <div className="mt-0.5 text-[11.5px] text-dim">{parts.join(" · ")}</div>
 
           {failed.length > 0 && (
-            <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto text-[11px] text-ink-mute">
+            <ul className="mt-2 max-h-24 space-y-0.5 overflow-y-auto text-[11px] text-faint">
               {failed.slice(0, 8).map((f) => (
                 <li key={f.path} className="truncate" title={`${f.path}: ${f.error}`}>
                   {f.path.split("/").pop()} — {f.error}
@@ -33,9 +33,9 @@ export function ImportToast() {
         <button
           onClick={dismissImport}
           aria-label="Dismiss"
-          className="text-ink-mute transition hover:text-ink"
+          className="text-faint transition hover:text-text"
         >
-          <Icon name="x" size={15} />
+          <Icon name="x" size={13} />
         </button>
       </div>
     </div>

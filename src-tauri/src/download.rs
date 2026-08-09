@@ -93,7 +93,41 @@ fn fail(app: &AppHandle, p: &mut Progress, e: &anyhow::Error) {
 // Direct file downloads (a link that already points at audio)
 // ---------------------------------------------------------------------------
 
+/// A media URL captured from inside a page. HLS playlists have to go through
+/// yt-dlp (which drives ffmpeg to stitch the segments); anything that's already
+/// a single file is a plain HTTP fetch.
+pub fn from_stream(app: AppHandle, url: String, referer: Option<String>, id: u64) {
+    let is_playlist = url.split('?').next().unwrap_or(&url).ends_with(".m3u8")
+        || url.contains(".m3u8?");
+
+    if is_playlist {
+        let mut p = Progress {
+            id,
+            url: url.clone(),
+            title: "Stream".into(),
+            stage: Stage::Starting,
+            percent: None,
+            detail: None,
+        };
+        emit(&app, &p);
+        if let Err(e) = extract_inner(&app, &url, id, &mut p, referer.as_deref()) {
+            fail(&app, &mut p, &e);
+        }
+    } else {
+        tauri::async_runtime::spawn(direct_with_referer(app, url, referer, id));
+    }
+}
+
 pub async fn direct(app: AppHandle, url: String, id: u64) {
+    direct_with_referer(app, url, None, id).await
+}
+
+pub async fn direct_with_referer(
+    app: AppHandle,
+    url: String,
+    referer: Option<String>,
+    id: u64,
+) {
     let mut p = Progress {
         id,
         url: url.clone(),
@@ -104,16 +138,30 @@ pub async fn direct(app: AppHandle, url: String, id: u64) {
     };
     emit(&app, &p);
 
-    if let Err(e) = direct_inner(&app, &url, id, &mut p).await {
+    if let Err(e) = direct_inner(&app, &url, id, &mut p, referer.as_deref()).await {
         fail(&app, &mut p, &e);
     }
 }
 
-async fn direct_inner(app: &AppHandle, url: &str, id: u64, p: &mut Progress) -> Result<()> {
-    let response = reqwest::Client::builder()
-        .user_agent("SoundLight")
+async fn direct_inner(
+    app: &AppHandle,
+    url: &str,
+    id: u64,
+    p: &mut Progress,
+    referer: Option<&str>,
+) -> Result<()> {
+    let mut request = reqwest::Client::builder()
+        .user_agent(crate::browser::user_agent())
         .build()?
-        .get(url)
+        .get(url);
+
+    // Media hosts routinely 403 a request that arrives without the page it was
+    // played from.
+    if let Some(referer) = referer {
+        request = request.header(reqwest::header::REFERER, referer);
+    }
+
+    let response = request
         .send()
         .await
         .context("request failed")?
@@ -172,12 +220,18 @@ pub fn extract(app: AppHandle, url: String, id: u64) {
     };
     emit(&app, &p);
 
-    if let Err(e) = extract_inner(&app, &url, id, &mut p) {
+    if let Err(e) = extract_inner(&app, &url, id, &mut p, None) {
         fail(&app, &mut p, &e);
     }
 }
 
-fn extract_inner(app: &AppHandle, url: &str, id: u64, p: &mut Progress) -> Result<()> {
+fn extract_inner(
+    app: &AppHandle,
+    url: &str,
+    id: u64,
+    p: &mut Progress,
+    referer: Option<&str>,
+) -> Result<()> {
     let yt_dlp = tools::find(app, tools::YT_DLP)
         .ok_or_else(|| anyhow!("yt-dlp is not installed — install it from Settings"))?;
     let ffmpeg = tools::find(app, tools::FFMPEG);
@@ -209,6 +263,10 @@ fn extract_inner(app: &AppHandle, url: &str, id: u64, p: &mut Progress) -> Resul
     } else {
         // Without it, take the best *single* audio stream so no merge is needed.
         cmd.args(["-f", "bestaudio[acodec!=none][vcodec=none]/bestaudio/best"]);
+    }
+
+    if let Some(referer) = referer {
+        cmd.args(["--referer", referer]);
     }
 
     cmd.arg(url)
@@ -266,6 +324,10 @@ fn extract_inner(app: &AppHandle, url: &str, id: u64, p: &mut Progress) -> Resul
             .find(|l| l.contains("ERROR"))
             .unwrap_or("yt-dlp failed")
             .trim();
+
+        if reason.contains("Unsupported URL") {
+            bail!("No audio on this page — open the track or video itself, then Download");
+        }
         bail!("{reason}");
     }
 
